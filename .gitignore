@@ -1,0 +1,5 @@
+# build output
+/waitfor
+/dist/
+*.test
+*.out

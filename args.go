@@ -1,0 +1,110 @@
+package main
+
+import (
+	"errors"
+	"flag"
+	"io"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const defaultAttemptTimeout = 5 * time.Second
+
+type options struct {
+	timeout  time.Duration
+	interval time.Duration
+	quiet    bool
+	help     bool
+	version  bool
+
+	words []string // positional arguments that describe targets
+}
+
+func (o *options) pollConfig() pollConfig {
+	return pollConfig{
+		interval:       o.interval,
+		attemptTimeout: defaultAttemptTimeout,
+	}
+}
+
+// parseArgs parses the command line. Flags and targets may be mixed in any
+// order: "waitfor db:5432 -t 30s cache:6379" is fine.
+func parseArgs(args []string) (*options, error) {
+	o := &options{interval: 500 * time.Millisecond}
+
+	fs := flag.NewFlagSet("waitfor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	for _, name := range []string{"t", "timeout"} {
+		fs.Var(durationFlag{&o.timeout}, name, "")
+	}
+	for _, name := range []string{"i", "interval"} {
+		fs.Var(durationFlag{&o.interval}, name, "")
+	}
+	for _, name := range []string{"q", "quiet"} {
+		fs.BoolVar(&o.quiet, name, false, "")
+	}
+	for _, name := range []string{"h", "help"} {
+		fs.BoolVar(&o.help, name, false, "")
+	}
+	fs.BoolVar(&o.version, "version", false, "")
+
+	// The flag package stops at the first positional argument, so keep
+	// going after each one.
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		args = fs.Args()
+		if len(args) == 0 {
+			break
+		}
+		o.words = append(o.words, args[0])
+		args = args[1:]
+	}
+
+	if o.interval <= 0 {
+		return nil, errors.New("--interval must be greater than zero")
+	}
+	return o, nil
+}
+
+// durationFlag is a flag.Value for durations that also accepts a bare
+// number of seconds ("30" or "2.5").
+type durationFlag struct{ d *time.Duration }
+
+func (f durationFlag) String() string {
+	if f.d == nil {
+		return ""
+	}
+	return f.d.String()
+}
+
+func (f durationFlag) Set(s string) error {
+	d, err := parseDuration(s)
+	if err != nil {
+		return err
+	}
+	*f.d = d
+	return nil
+}
+
+func parseDuration(s string) (time.Duration, error) {
+	errBad := errors.New("want a duration like 30s, 500ms or 2m")
+	if s != "" && strings.Trim(s, "0123456789.") == "" {
+		secs, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return 0, errBad
+		}
+		return time.Duration(secs * float64(time.Second)), nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, errBad
+	}
+	if d < 0 {
+		return 0, errors.New("duration must not be negative")
+	}
+	return d, nil
+}
