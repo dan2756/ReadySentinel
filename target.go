@@ -18,10 +18,10 @@ type target interface {
 }
 
 // parseTargets turns positional arguments into targets.
-func parseTargets(words []string) ([]target, error) {
+func parseTargets(words []string, o *options) ([]target, error) {
 	var ts []target
 	for _, w := range words {
-		t, err := parseTarget(w)
+		t, err := parseTarget(w, o)
 		if err != nil {
 			return nil, err
 		}
@@ -34,11 +34,13 @@ func parseTargets(words []string) ([]target, error) {
 }
 
 // parseTarget works out what kind of target s describes.
-func parseTarget(s string) (target, error) {
+func parseTarget(s string, o *options) (target, error) {
 	lower := strings.ToLower(s)
 	switch {
 	case strings.HasPrefix(lower, "tcp://"):
 		return parseHostPort(s[len("tcp://"):])
+	case strings.HasPrefix(lower, "http://"), strings.HasPrefix(lower, "https://"):
+		return newHTTPTarget(s, o)
 	case strings.Contains(s, "://"):
 		scheme, _, _ := strings.Cut(s, "://")
 		return nil, fmt.Errorf("unsupported scheme %q in %q", scheme, s)
@@ -47,7 +49,7 @@ func parseTarget(s string) (target, error) {
 	case strings.Contains(s, ":"):
 		return parseHostPort(s)
 	}
-	return nil, fmt.Errorf("don't know how to wait for %q (want PORT or HOST:PORT)", s)
+	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT or a URL)", s)
 }
 
 func parseHostPort(s string) (target, error) {

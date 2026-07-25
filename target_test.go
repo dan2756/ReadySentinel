@@ -18,7 +18,7 @@ func TestParseTargetTCP(t *testing.T) {
 		{"[::1]:5432", "[::1]:5432"},
 	}
 	for _, tt := range tests {
-		got, err := parseTarget(tt.in)
+		got, err := parseTarget(tt.in, defaultOptions(t))
 		if err != nil {
 			t.Errorf("parseTarget(%q): %v", tt.in, err)
 			continue
@@ -34,14 +34,14 @@ func TestParseTargetTCP(t *testing.T) {
 
 func TestParseTargetErrors(t *testing.T) {
 	for _, in := range []string{"0", "65536", "localhost", "db:", "db:http", "::1", "ftp://host:21"} {
-		if got, err := parseTarget(in); err == nil {
+		if got, err := parseTarget(in, defaultOptions(t)); err == nil {
 			t.Errorf("parseTarget(%q) = %v, want error", in, got)
 		}
 	}
 }
 
 func TestParseTargetsEmpty(t *testing.T) {
-	if _, err := parseTargets(nil); err == nil {
+	if _, err := parseTargets(nil, defaultOptions(t)); err == nil {
 		t.Error("parseTargets(nil): want error")
 	}
 }
@@ -90,6 +90,16 @@ func closedAddr(t *testing.T) string {
 	addr := ln.Addr().String()
 	ln.Close()
 	return addr
+}
+
+// defaultOptions returns the options a bare "waitfor" run would use.
+func defaultOptions(t *testing.T) *options {
+	t.Helper()
+	o, err := parseArgs(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o
 }
 
 func testContext(t *testing.T) context.Context {

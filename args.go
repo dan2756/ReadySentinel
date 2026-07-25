@@ -9,14 +9,15 @@ import (
 	"time"
 )
 
-const defaultAttemptTimeout = 5 * time.Second
-
 type options struct {
-	timeout  time.Duration
-	interval time.Duration
-	quiet    bool
-	help     bool
-	version  bool
+	timeout        time.Duration
+	interval       time.Duration
+	attemptTimeout time.Duration
+	quiet          bool
+	help           bool
+	version        bool
+
+	status statusRange // accepted HTTP status codes
 
 	words []string // positional arguments that describe targets
 }
@@ -24,14 +25,18 @@ type options struct {
 func (o *options) pollConfig() pollConfig {
 	return pollConfig{
 		interval:       o.interval,
-		attemptTimeout: defaultAttemptTimeout,
+		attemptTimeout: o.attemptTimeout,
 	}
 }
 
 // parseArgs parses the command line. Flags and targets may be mixed in any
 // order: "waitfor db:5432 -t 30s cache:6379" is fine.
 func parseArgs(args []string) (*options, error) {
-	o := &options{interval: 500 * time.Millisecond}
+	o := &options{
+		interval:       500 * time.Millisecond,
+		attemptTimeout: 5 * time.Second,
+		status:         defaultStatus,
+	}
 
 	fs := flag.NewFlagSet("waitfor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -42,6 +47,8 @@ func parseArgs(args []string) (*options, error) {
 	for _, name := range []string{"i", "interval"} {
 		fs.Var(durationFlag{&o.interval}, name, "")
 	}
+	fs.Var(durationFlag{&o.attemptTimeout}, "attempt-timeout", "")
+	fs.Var(&o.status, "status", "")
 	for _, name := range []string{"q", "quiet"} {
 		fs.BoolVar(&o.quiet, name, false, "")
 	}
