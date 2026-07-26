@@ -17,7 +17,9 @@ type options struct {
 	help           bool
 	version        bool
 
-	status statusRange // accepted HTTP status codes
+	status   statusRange // accepted HTTP status codes
+	nonempty bool        // file targets must have content
+	gone     bool        // file targets must disappear
 
 	words []string // positional arguments that describe targets
 }
@@ -49,6 +51,8 @@ func parseArgs(args []string) (*options, error) {
 	}
 	fs.Var(durationFlag{&o.attemptTimeout}, "attempt-timeout", "")
 	fs.Var(&o.status, "status", "")
+	fs.BoolVar(&o.nonempty, "nonempty", false, "")
+	fs.BoolVar(&o.gone, "gone", false, "")
 	for _, name := range []string{"q", "quiet"} {
 		fs.BoolVar(&o.quiet, name, false, "")
 	}
@@ -73,6 +77,9 @@ func parseArgs(args []string) (*options, error) {
 
 	if o.interval <= 0 {
 		return nil, errors.New("--interval must be greater than zero")
+	}
+	if o.nonempty && o.gone {
+		return nil, errors.New("--nonempty and --gone cannot be combined")
 	}
 	return o, nil
 }

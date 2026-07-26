@@ -17,11 +17,24 @@ type target interface {
 	String() string
 }
 
-// parseTargets turns positional arguments into targets.
+// parseTargets turns positional arguments into targets. Most targets are a
+// single word whose kind is guessed by parseTarget; "file PATH" names its
+// kind explicitly.
 func parseTargets(words []string, o *options) ([]target, error) {
 	var ts []target
-	for _, w := range words {
-		t, err := parseTarget(w, o)
+	for i := 0; i < len(words); i++ {
+		var t target
+		var err error
+		switch w := words[i]; w {
+		case "file":
+			if i+1 == len(words) {
+				return nil, errors.New("file: missing path")
+			}
+			i++
+			t, err = newFileTarget(words[i], o)
+		default:
+			t, err = parseTarget(w, o)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -44,12 +57,16 @@ func parseTarget(s string, o *options) (target, error) {
 	case strings.Contains(s, "://"):
 		scheme, _, _ := strings.Cut(s, "://")
 		return nil, fmt.Errorf("unsupported scheme %q in %q", scheme, s)
+	case strings.Contains(s, "/"):
+		// "./build/done", "/tmp/ready", "out/app.sock": host:port never
+		// contains a slash, so this must be a path.
+		return newFileTarget(s, o)
 	case isDigits(s):
 		return parseHostPort(":" + s)
 	case strings.Contains(s, ":"):
 		return parseHostPort(s)
 	}
-	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT or a URL)", s)
+	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT, a URL or file PATH)", s)
 }
 
 func parseHostPort(s string) (target, error) {
