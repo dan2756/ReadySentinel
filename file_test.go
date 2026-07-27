@@ -39,6 +39,9 @@ func TestParseTargetsFileKeyword(t *testing.T) {
 	if _, err := parseTargets([]string{"5432", "file"}, defaultOptions(t)); err == nil {
 		t.Error("file without a path: want error")
 	}
+	if _, err := parseTargets([]string{"file", ""}, defaultOptions(t)); err == nil {
+		t.Error("file with an empty path: want error")
+	}
 }
 
 func TestParseArgsNonemptyAndGone(t *testing.T) {

@@ -2,10 +2,23 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
+
+// TestMain lets the test binary double as a helper process: with
+// WAITFOR_TEST_SLEEP set it just sleeps that long and exits.
+func TestMain(m *testing.M) {
+	if s := os.Getenv("WAITFOR_TEST_SLEEP"); s != "" {
+		d, _ := time.ParseDuration(s)
+		time.Sleep(d)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestRunReady(t *testing.T) {
 	ln := listen(t)

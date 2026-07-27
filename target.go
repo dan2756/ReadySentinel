@@ -18,20 +18,24 @@ type target interface {
 }
 
 // parseTargets turns positional arguments into targets. Most targets are a
-// single word whose kind is guessed by parseTarget; "file PATH" names its
-// kind explicitly.
+// single word whose kind is guessed by parseTarget; "file PATH" and
+// "pid PID" name their kind explicitly.
 func parseTargets(words []string, o *options) ([]target, error) {
 	var ts []target
 	for i := 0; i < len(words); i++ {
 		var t target
 		var err error
 		switch w := words[i]; w {
-		case "file":
+		case "file", "pid":
 			if i+1 == len(words) {
-				return nil, errors.New("file: missing path")
+				return nil, fmt.Errorf("%s: missing argument", w)
 			}
 			i++
-			t, err = newFileTarget(words[i], o)
+			if w == "file" {
+				t, err = newFileTarget(words[i], o)
+			} else {
+				t, err = parsePID(words[i])
+			}
 		default:
 			t, err = parseTarget(w, o)
 		}
@@ -66,7 +70,7 @@ func parseTarget(s string, o *options) (target, error) {
 	case strings.Contains(s, ":"):
 		return parseHostPort(s)
 	}
-	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT, a URL or file PATH)", s)
+	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT, a URL, file PATH or pid PID)", s)
 }
 
 func parseHostPort(s string) (target, error) {

@@ -1,7 +1,6 @@
 # waitfor
 
-Wait until a TCP port accepts connections, a URL answers or a file shows up,
-then exit 0.
+Wait for a port, URL, file, or process exit, then exit 0.
 
 Handy in shell scripts, Makefiles and container entrypoints where something
 has to be up before the next step runs:
@@ -10,6 +9,7 @@ has to be up before the next step runs:
 waitfor db:5432 && ./migrate
 waitfor http://localhost:8080/health -t 30s && ./smoke-test
 waitfor file ./build/done && ./package
+waitfor pid "$(cat server.pid)" && echo "server stopped"
 ```
 
 ## Install
@@ -34,6 +34,7 @@ A target can be written as:
 | `http://…`, `https://…` | GET returns an accepted status          |
 | `file PATH`             | PATH exists                             |
 | `./PATH`, `/PATH`, `a/b` | the same: anything with a `/` is a file |
+| `pid PID`               | process PID has exited                  |
 
 With several targets, waitfor waits until all of them are ready.
 
@@ -57,6 +58,9 @@ real `200`.
 
 `--nonempty` treats a directory as non-empty once it has an entry. `--gone`
 is handy for lock files: `waitfor --gone ./deploy.lock`.
+
+`pid` targets poll `kill(PID, 0)`, so the process does not have to be a child
+of waitfor. They are available on Linux and macOS.
 
 ## Exit status
 

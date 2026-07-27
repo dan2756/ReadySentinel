@@ -1,5 +1,5 @@
 // Command waitfor waits until TCP ports accept connections, HTTP endpoints
-// answer or files appear, then exits 0.
+// answer, files appear or processes exit, then exits 0.
 package main
 
 import (
@@ -19,7 +19,7 @@ const (
 	exitUsage   = 2
 )
 
-const usage = `waitfor waits until ports, URLs and files are ready, then exits 0.
+const usage = `waitfor waits for a port, URL, file or process exit, then exits 0.
 
 Usage:
   waitfor [flags] TARGET...
@@ -32,6 +32,7 @@ Targets:
                       a GET request returns an accepted status
   file PATH           PATH exists; "./PATH", "/PATH" or anything with a
                       slash is taken as a file too
+  pid PID             process PID has exited (it need not be our child)
 
 Flags:
   -t, --timeout DUR        give up after DUR (default 0: wait forever)
