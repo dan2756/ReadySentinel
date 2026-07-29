@@ -14,6 +14,7 @@ type options struct {
 	interval       time.Duration
 	attemptTimeout time.Duration
 	quiet          bool
+	any            bool
 	help           bool
 	version        bool
 
@@ -28,6 +29,7 @@ func (o *options) pollConfig() pollConfig {
 	return pollConfig{
 		interval:       o.interval,
 		attemptTimeout: o.attemptTimeout,
+		any:            o.any,
 	}
 }
 
@@ -50,6 +52,7 @@ func parseArgs(args []string) (*options, error) {
 		fs.Var(durationFlag{&o.interval}, name, "")
 	}
 	fs.Var(durationFlag{&o.attemptTimeout}, "attempt-timeout", "")
+	fs.BoolVar(&o.any, "any", false, "")
 	fs.Var(&o.status, "status", "")
 	fs.BoolVar(&o.nonempty, "nonempty", false, "")
 	fs.BoolVar(&o.gone, "gone", false, "")

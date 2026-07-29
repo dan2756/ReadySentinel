@@ -76,6 +76,36 @@ func TestWaitAllTimeout(t *testing.T) {
 	}
 }
 
+func TestWaitAllAny(t *testing.T) {
+	never := &fakeTarget{name: "never", readyAfter: -1}
+	soon := &fakeTarget{name: "soon", readyAfter: 2}
+	cfg := fastPoll
+	cfg.any = true
+
+	var ready []string
+	pending := waitAll(testContext(t), []target{never, soon}, cfg, func(t target) {
+		ready = append(ready, t.String())
+	})
+	if pending != nil {
+		t.Fatalf("pending = %v, want nil", pending)
+	}
+	if strings.Join(ready, ",") != "soon" {
+		t.Errorf("ready = %v, want [soon]", ready)
+	}
+}
+
+func TestWaitAllAnyTimeout(t *testing.T) {
+	a := &fakeTarget{name: "a", readyAfter: -1}
+	b := &fakeTarget{name: "b", readyAfter: -1}
+	cfg := fastPoll
+	cfg.any = true
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if pending := waitAll(ctx, []target{a, b}, cfg, nil); len(pending) != 2 {
+		t.Errorf("pending = %v, want both targets", pending)
+	}
+}
+
 func TestAttemptTimeout(t *testing.T) {
 	start := time.Now()
 	err := attempt(context.Background(), blockingTarget{}, 20*time.Millisecond)

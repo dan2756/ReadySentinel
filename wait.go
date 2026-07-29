@@ -16,6 +16,7 @@ const (
 type pollConfig struct {
 	interval       time.Duration
 	attemptTimeout time.Duration
+	any            bool // stop as soon as one target is ready
 }
 
 // notReady is a target that was still not ready when time ran out, with the
@@ -25,9 +26,10 @@ type notReady struct {
 	err    error
 }
 
-// waitAll polls every target concurrently until all of them are ready or ctx
-// is done. onReady, if non-nil, is called as each target becomes ready. It
-// returns the targets that were not ready in time, or nil.
+// waitAll polls every target concurrently until all of them (or with
+// cfg.any, one of them) are ready, or ctx is done. onReady, if non-nil, is
+// called as each target becomes ready. It returns the targets that were not
+// ready in time, or nil on success.
 func waitAll(ctx context.Context, ts []target, cfg pollConfig, onReady func(target)) []notReady {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -50,6 +52,9 @@ func waitAll(ctx context.Context, ts []target, cfg pollConfig, onReady func(targ
 		}
 		if onReady != nil {
 			onReady(ts[r.i])
+		}
+		if cfg.any {
+			return nil // the deferred cancel stops the other pollers
 		}
 	}
 	if len(failed) == 0 {

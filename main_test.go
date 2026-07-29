@@ -45,6 +45,27 @@ func TestRunSeveralTargets(t *testing.T) {
 	}
 }
 
+func TestRunAny(t *testing.T) {
+	open, closed := listen(t), closedAddr(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--any", closed, open.Addr().String(), "-t", "5s"}, &stdout, &stderr)
+	if code != exitReady {
+		t.Fatalf("exit %d, want 0; stderr: %s", code, stderr.String())
+	}
+	want := "waiting for any of " + closed + ", " + open.Addr().String() + "…\n" + open.Addr().String() + " ready after"
+	if !strings.HasPrefix(stderr.String(), want) {
+		t.Errorf("stderr = %q, want prefix %q", stderr.String(), want)
+	}
+
+	stderr.Reset()
+	if code := run([]string{closed, open.Addr().String(), "-t", "200ms", "-i", "20ms"}, &stdout, &stderr); code != exitTimeout {
+		t.Errorf("without --any: exit %d, want %d", code, exitTimeout)
+	}
+	if !strings.Contains(stderr.String(), "still waiting for "+closed+"\n") {
+		t.Errorf("stderr = %q, want it to name the closed port", stderr.String())
+	}
+}
+
 func TestRunTimeout(t *testing.T) {
 	addr := closedAddr(t)
 	var stdout, stderr bytes.Buffer

@@ -24,6 +24,8 @@ const usage = `waitfor waits for a port, URL, file or process exit, then exits 0
 Usage:
   waitfor [flags] TARGET...
 
+All targets must be ready unless --any is given.
+
 Targets:
   5432, :5432         TCP port on localhost
   HOST:PORT           a TCP connection to HOST:PORT succeeds
@@ -39,6 +41,7 @@ Flags:
   -i, --interval DUR       delay between attempts (default 500ms, backing off to 4x)
       --attempt-timeout DUR
                            limit for a single attempt (default 5s)
+      --any                succeed as soon as any one target is ready
       --status RANGE       accepted HTTP status: 200 or 200-299 (default 200-399)
       --nonempty           file targets must not be empty
       --gone               wait for file targets to disappear instead
@@ -81,7 +84,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		defer cancel()
 	}
 
-	rep := newReporter(stderr, opts.quiet)
+	rep := newReporter(stderr, opts.quiet, opts.any)
 	rep.start(targets)
 	if pending := waitAll(ctx, targets, opts.pollConfig(), rep.ready); len(pending) > 0 {
 		rep.timedOut(pending)

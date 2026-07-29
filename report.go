@@ -16,12 +16,13 @@ import (
 type reporter struct {
 	w       io.Writer
 	quiet   bool
+	any     bool
 	single  bool
 	started time.Time
 }
 
-func newReporter(w io.Writer, quiet bool) *reporter {
-	return &reporter{w: w, quiet: quiet}
+func newReporter(w io.Writer, quiet, anyOf bool) *reporter {
+	return &reporter{w: w, quiet: quiet, any: anyOf}
 }
 
 func (r *reporter) printf(format string, args ...any) {
@@ -41,7 +42,11 @@ func (r *reporter) start(ts []target) {
 	for i, t := range ts {
 		names[i] = t.String()
 	}
-	r.printf("waiting for %s…\n", strings.Join(names, ", "))
+	of := ""
+	if r.any {
+		of = "any of "
+	}
+	r.printf("waiting for %s%s…\n", of, strings.Join(names, ", "))
 }
 
 func (r *reporter) ready(t target) {
@@ -60,7 +65,11 @@ func (r *reporter) timedOut(pending []notReady) {
 		for i, p := range pending {
 			names[i] = p.target.String()
 		}
-		msg += "; still waiting for " + strings.Join(names, ", ")
+		if r.any {
+			msg += "; none of " + strings.Join(names, ", ") + " became ready"
+		} else {
+			msg += "; still waiting for " + strings.Join(names, ", ")
+		}
 	}
 	r.printf("%s\n", msg)
 }

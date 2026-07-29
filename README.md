@@ -36,13 +36,20 @@ A target can be written as:
 | `./PATH`, `/PATH`, `a/b` | the same: anything with a `/` is a file |
 | `pid PID`               | process PID has exited                  |
 
-With several targets, waitfor waits until all of them are ready.
+With several targets, waitfor waits until all of them are ready, or with
+`--any`, until the first one is:
+
+```sh
+waitfor db:5432 cache:6379 search:9200            # all three
+waitfor --any primary:5432 replica:5432           # whichever answers first
+```
 
 | Flag                    | Default   | Description                              |
 |-------------------------|-----------|------------------------------------------|
 | `-t, --timeout DUR`     | `0`       | give up after DUR; `0` waits forever     |
 | `-i, --interval DUR`    | `500ms`   | delay between attempts (backs off to 4x) |
 | `--attempt-timeout DUR` | `5s`      | limit for a single connect or request    |
+| `--any`                 |           | done when any one target is ready        |
 | `--status RANGE`        | `200-399` | accepted HTTP status: `200` or `200-299` |
 | `--nonempty`            |           | file targets must have content           |
 | `--gone`                |           | wait for file targets to disappear       |
