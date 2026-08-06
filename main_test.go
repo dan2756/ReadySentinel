@@ -10,8 +10,12 @@ import (
 )
 
 // TestMain lets the test binary double as a helper process: with
+// WAITFOR_TEST_MAIN=1 it behaves exactly like the waitfor binary, and with
 // WAITFOR_TEST_SLEEP set it just sleeps that long and exits.
 func TestMain(m *testing.M) {
+	if os.Getenv("WAITFOR_TEST_MAIN") == "1" {
+		os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	}
 	if s := os.Getenv("WAITFOR_TEST_SLEEP"); s != "" {
 		d, _ := time.ParseDuration(s)
 		time.Sleep(d)

@@ -74,6 +74,10 @@ func (r *reporter) timedOut(pending []notReady) {
 	r.printf("%s\n", msg)
 }
 
+func (r *reporter) interrupted() {
+	r.printf("interrupted\n")
+}
+
 // formatDuration prints short durations as "2.4s" and longer ones as "1m12s".
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {

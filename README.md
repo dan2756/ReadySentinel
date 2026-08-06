@@ -21,7 +21,7 @@ go install github.com/dan2756/waitfor@latest
 ## Usage
 
 ```
-waitfor [flags] TARGET...
+waitfor [flags] TARGET... [-- COMMAND [ARG...]]
 ```
 
 A target can be written as:
@@ -69,13 +69,33 @@ is handy for lock files: `waitfor --gone ./deploy.lock`.
 `pid` targets poll `kill(PID, 0)`, so the process does not have to be a child
 of waitfor. They are available on Linux and macOS.
 
+## Running a command
+
+Anything after `--` is a command to run once every target is ready:
+
+```sh
+waitfor db:5432 cache:6379 -t 60s -- npm start
+```
+
+waitfor `exec`s the command in its own place, the way a shell's `exec`
+does: it keeps the same pid, stdin/stdout/stderr and environment, receives
+signals directly, and its exit status is the one you see. That makes it a
+good fit for container entrypoints. If the wait times out, the command is
+not run.
+
 ## Exit status
 
-| Code | Meaning     |
-|------|-------------|
-| 0    | ready       |
-| 1    | timed out   |
-| 2    | usage error |
+| Code | Meaning                                         |
+|------|-------------------------------------------------|
+| 0    | ready                                           |
+| 1    | timed out                                       |
+| 2    | usage error                                     |
+| 126  | the command after `--` could not be run         |
+| 127  | the command after `--` was not found            |
+| 130  | interrupted with Ctrl-C (SIGINT)                |
+| 143  | terminated (SIGTERM)                            |
+
+When a command runs after `--`, waitfor's exit status is the command's.
 
 ## License
 

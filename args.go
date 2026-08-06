@@ -22,7 +22,8 @@ type options struct {
 	nonempty bool        // file targets must have content
 	gone     bool        // file targets must disappear
 
-	words []string // positional arguments that describe targets
+	words   []string // positional arguments that describe targets
+	command []string // what to run once ready, from after "--"
 }
 
 func (o *options) pollConfig() pollConfig {
@@ -34,7 +35,8 @@ func (o *options) pollConfig() pollConfig {
 }
 
 // parseArgs parses the command line. Flags and targets may be mixed in any
-// order: "waitfor db:5432 -t 30s cache:6379" is fine.
+// order: "waitfor db:5432 -t 30s cache:6379" is fine. Everything after the
+// first "--" is the command to run.
 func parseArgs(args []string) (*options, error) {
 	o := &options{
 		interval:       500 * time.Millisecond,
@@ -63,6 +65,17 @@ func parseArgs(args []string) (*options, error) {
 		fs.BoolVar(&o.help, name, false, "")
 	}
 	fs.BoolVar(&o.version, "version", false, "")
+
+	for i, a := range args {
+		if a == "--" {
+			o.command = args[i+1:]
+			args = args[:i]
+			if len(o.command) == 0 {
+				return nil, errors.New("missing command after --")
+			}
+			break
+		}
+	}
 
 	// The flag package stops at the first positional argument, so keep
 	// going after each one.

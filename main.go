@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,17 +15,19 @@ import (
 var version = "dev"
 
 const (
-	exitReady   = 0
-	exitTimeout = 1
-	exitUsage   = 2
+	exitReady       = 0
+	exitTimeout     = 1
+	exitUsage       = 2
+	exitInterrupted = 130 // 128 + SIGINT; SIGTERM gives 143
 )
 
 const usage = `waitfor waits for a port, URL, file or process exit, then exits 0.
 
 Usage:
-  waitfor [flags] TARGET...
+  waitfor [flags] TARGET... [-- COMMAND [ARG...]]
 
-All targets must be ready unless --any is given.
+All targets must be ready unless --any is given. With a COMMAND, waitfor
+execs it once ready and exits with its status; on timeout it is not run.
 
 Targets:
   5432, :5432         TCP port on localhost
@@ -51,7 +54,12 @@ Flags:
 
 Durations look like 30s, 1m30s or 500ms; a bare number means seconds.
 
-Exit status: 0 ready, 1 timed out, 2 usage error.
+Exit status:
+  0    ready (or with COMMAND, the command's own status)
+  1    timed out
+  2    usage error
+  126  COMMAND could not be run; 127 if it was not found
+  130  interrupted (143 for SIGTERM)
 `
 
 func main() {
@@ -77,7 +85,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return usageError(stderr, err)
 	}
 
-	ctx := context.Background()
+	sigCtx, stopSignals := withSignals(context.Background())
+	defer stopSignals()
+	ctx := sigCtx
 	if opts.timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, opts.timeout)
@@ -87,8 +97,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	rep := newReporter(stderr, opts.quiet, opts.any)
 	rep.start(targets)
 	if pending := waitAll(ctx, targets, opts.pollConfig(), rep.ready); len(pending) > 0 {
+		var sig *signalError
+		if errors.As(context.Cause(sigCtx), &sig) {
+			rep.interrupted()
+			return sig.exitCode()
+		}
 		rep.timedOut(pending)
 		return exitTimeout
+	}
+
+	if len(opts.command) > 0 {
+		stopSignals() // let the command see signals as usual
+		return execCommand(opts.command, stderr)
 	}
 	return exitReady
 }

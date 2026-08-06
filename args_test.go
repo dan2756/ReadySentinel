@@ -25,6 +25,26 @@ func TestParseArgsMixedOrder(t *testing.T) {
 	}
 }
 
+func TestParseArgsCommand(t *testing.T) {
+	o, err := parseArgs([]string{"db:5432", "-t", "5s", "--", "npm", "start", "--", "-q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"db:5432"}; !reflect.DeepEqual(o.words, want) {
+		t.Errorf("words = %q, want %q", o.words, want)
+	}
+	if want := []string{"npm", "start", "--", "-q"}; !reflect.DeepEqual(o.command, want) {
+		t.Errorf("command = %q, want %q", o.command, want)
+	}
+	if o.quiet {
+		t.Error("-q after -- was parsed as a flag")
+	}
+
+	if _, err := parseArgs([]string{"db:5432", "--"}); err == nil {
+		t.Error("empty command after --: want error")
+	}
+}
+
 func TestParseArgsDefaults(t *testing.T) {
 	o, err := parseArgs([]string{"5432"})
 	if err != nil {
