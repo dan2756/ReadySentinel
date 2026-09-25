@@ -51,6 +51,7 @@ waitfor --any primary:5432 replica:5432           # whichever answers first
 | `--attempt-timeout DUR` | `5s`      | limit for a single connect or request    |
 | `--any`                 |           | done when any one target is ready        |
 | `--status RANGE`        | `200-399` | accepted HTTP status: `200` or `200-299` |
+| `--contains TEXT`       |           | HTTP response body must contain TEXT     |
 | `--nonempty`            |           | file targets must have content           |
 | `--gone`                |           | wait for file targets to disappear       |
 | `-q, --quiet`           |           | no progress output                       |
@@ -62,6 +63,15 @@ Durations are Go-style (`30s`, `1m30s`, `500ms`); a bare number is seconds.
 HTTP targets send a `GET` and do not follow redirects, so a `302` to a login
 page counts as up under the default range. Use `--status 200` to insist on a
 real `200`.
+
+`--contains` is for health endpoints that answer `200` before they are
+really ready:
+
+```sh
+waitfor http://localhost:9200/_cluster/health --contains '"status":"green"'
+```
+
+Only the first 1 MiB of the body is searched.
 
 `--nonempty` treats a directory as non-empty once it has an entry. `--gone`
 is handy for lock files: `waitfor --gone ./deploy.lock`.

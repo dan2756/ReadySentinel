@@ -132,6 +132,53 @@ func TestHTTPTargetBecomesReady(t *testing.T) {
 	}
 }
 
+func TestHTTPTargetContains(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hits.Add(1) < 3 {
+			io.WriteString(w, `{"status":"starting"}`)
+			return
+		}
+		io.WriteString(w, `{"status":"ok"}`)
+	}))
+	defer srv.Close()
+
+	tgt := newTestHTTPTarget(t, srv.URL, defaultStatus)
+	tgt.contains = `"status":"ok"`
+	if err := tgt.Check(testContext(t)); err == nil || !strings.Contains(err.Error(), "does not contain") {
+		t.Errorf("first attempt: err = %v, want a body mismatch", err)
+	}
+	if pending := waitAll(testContext(t), []target{tgt}, fastPoll, nil); pending != nil {
+		t.Fatalf("not ready: %v", pending[0].err)
+	}
+	if n := hits.Load(); n != 3 {
+		t.Errorf("server saw %d requests, want 3", n)
+	}
+}
+
+func TestHTTPTargetContainsNeedsStatus(t *testing.T) {
+	srv := statusServer(t)
+	tgt := newTestHTTPTarget(t, srv.URL+"/down", defaultStatus)
+	tgt.contains = "warming up"
+	if err := tgt.Check(testContext(t)); err == nil || !strings.Contains(err.Error(), "503") {
+		t.Errorf("err = %v, want the status to be checked first", err)
+	}
+}
+
+func TestHTTPTargetContainsLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(bytes.Repeat([]byte("x"), maxBody))
+		io.WriteString(w, "ready")
+	}))
+	defer srv.Close()
+
+	tgt := newTestHTTPTarget(t, srv.URL, defaultStatus)
+	tgt.contains = "ready"
+	if err := tgt.Check(testContext(t)); err == nil {
+		t.Error("matched text past the body size limit")
+	}
+}
+
 func TestHTTPTargetAttemptTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -176,6 +223,14 @@ func TestRunHTTP(t *testing.T) {
 	stderr.Reset()
 	if code := run([]string{srv.URL + "/down", "--status", "200-299", "-t", "200ms", "-i", "20ms"}, &stdout, &stderr); code != exitTimeout {
 		t.Errorf("/down: exit %d, want %d; stderr: %s", code, exitTimeout, stderr.String())
+	}
+	stderr.Reset()
+	if code := run([]string{srv.URL + "/ok", "--contains", "ok", "-t", "5s"}, &stdout, &stderr); code != exitReady {
+		t.Errorf("/ok --contains ok: exit %d; stderr: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := run([]string{srv.URL + "/ok", "--contains", "nope", "-t", "200ms", "-i", "20ms"}, &stdout, &stderr); code != exitTimeout {
+		t.Errorf("/ok --contains nope: exit %d, want %d", code, exitTimeout)
 	}
 	stderr.Reset()
 	if code := run([]string{srv.URL + "/ok", "--status", "2xx"}, &stdout, &stderr); code != exitUsage {

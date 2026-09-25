@@ -19,6 +19,7 @@ type options struct {
 	version        bool
 
 	status   statusRange // accepted HTTP status codes
+	contains string      // HTTP bodies must contain this
 	nonempty bool        // file targets must have content
 	gone     bool        // file targets must disappear
 
@@ -56,6 +57,7 @@ func parseArgs(args []string) (*options, error) {
 	fs.Var(durationFlag{&o.attemptTimeout}, "attempt-timeout", "")
 	fs.BoolVar(&o.any, "any", false, "")
 	fs.Var(&o.status, "status", "")
+	fs.StringVar(&o.contains, "contains", "", "")
 	fs.BoolVar(&o.nonempty, "nonempty", false, "")
 	fs.BoolVar(&o.gone, "gone", false, "")
 	for _, name := range []string{"q", "quiet"} {

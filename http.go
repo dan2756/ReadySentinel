@@ -1,22 +1,28 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 )
 
-// httpTarget is ready once a GET request returns an accepted status.
-// Redirects are not followed: a 3xx is itself a sign of life, and the
-// default range accepts it.
+// maxBody caps how much of a response body --contains searches.
+const maxBody = 1 << 20
+
+// httpTarget is ready once a GET request returns an accepted status and, if
+// contains is set, a body containing that text. Redirects are not followed:
+// a 3xx is itself a sign of life, and the default range accepts it.
 type httpTarget struct {
-	url    string
-	status statusRange
-	client *http.Client
+	url      string
+	status   statusRange
+	contains string
+	client   *http.Client
 }
 
 func newHTTPTarget(raw string, o *options) (target, error) {
@@ -27,8 +33,9 @@ func newHTTPTarget(raw string, o *options) (target, error) {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DisableKeepAlives = true // every attempt should open a fresh connection
 	return &httpTarget{
-		url:    raw,
-		status: o.status,
+		url:      raw,
+		status:   o.status,
+		contains: o.contains,
 		client: &http.Client{
 			Transport: tr,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -53,6 +60,15 @@ func (t *httpTarget) Check(ctx context.Context) error {
 	defer resp.Body.Close()
 	if !t.status.contains(resp.StatusCode) {
 		return fmt.Errorf("got %s", resp.Status)
+	}
+	if t.contains != "" {
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+		if err != nil {
+			return fmt.Errorf("reading body: %w", err)
+		}
+		if !bytes.Contains(body, []byte(t.contains)) {
+			return fmt.Errorf("body does not contain %q", t.contains)
+		}
 	}
 	return nil
 }

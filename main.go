@@ -46,6 +46,7 @@ Flags:
                            limit for a single attempt (default 5s)
       --any                succeed as soon as any one target is ready
       --status RANGE       accepted HTTP status: 200 or 200-299 (default 200-399)
+      --contains TEXT      HTTP response body must contain TEXT
       --nonempty           file targets must not be empty
       --gone               wait for file targets to disappear instead
   -q, --quiet              don't print progress to stderr
