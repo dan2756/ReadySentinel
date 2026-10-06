@@ -4,9 +4,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -52,6 +54,42 @@ func TestPIDTargetRunning(t *testing.T) {
 	tgt := &pidTarget{pid: os.Getpid()}
 	if err := tgt.Check(testContext(t)); err == nil {
 		t.Error("our own process reported as exited")
+	}
+}
+
+func TestPIDTargetSignalErrors(t *testing.T) {
+	orig := signalZero
+	t.Cleanup(func() { signalZero = orig })
+
+	tests := []struct {
+		err   error
+		ready bool
+	}{
+		{nil, false},
+		{syscall.EPERM, false}, // exists, owned by someone else
+		{syscall.ESRCH, true},
+		{syscall.EINVAL, false},
+	}
+	for _, tt := range tests {
+		signalZero = func(int) error { return tt.err }
+		err := (&pidTarget{pid: 42}).Check(testContext(t))
+		if (err == nil) != tt.ready {
+			t.Errorf("kill returned %v: Check = %v, want ready=%v", tt.err, err, tt.ready)
+		}
+		if tt.err == syscall.EINVAL && !errors.Is(err, syscall.EINVAL) {
+			t.Errorf("unexpected kill error was not passed on: %v", err)
+		}
+	}
+}
+
+func TestPIDTargetOtherUser(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root may signal every process")
+	}
+	// pid 1 (init, systemd or launchd) is owned by root, so kill(1, 0)
+	// fails with EPERM.
+	if err := (&pidTarget{pid: 1}).Check(testContext(t)); err == nil {
+		t.Error("pid 1 reported as exited")
 	}
 }
 
