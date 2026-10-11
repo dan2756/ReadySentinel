@@ -77,7 +77,10 @@ Only the first 1 MiB of the body is searched.
 is handy for lock files: `waitfor --gone ./deploy.lock`.
 
 `pid` targets poll `kill(PID, 0)`, so the process does not have to be a child
-of waitfor. They are available on Linux and macOS.
+of waitfor. They are available on Linux and macOS. A process owned by another
+user still counts as running. On Linux, a process that has exited but not yet
+been reaped by its parent (a zombie) counts as exited; macOS has no `/proc`
+to check, so there it counts as running until its parent waits for it.
 
 ## Running a command
 

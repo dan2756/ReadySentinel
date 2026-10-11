@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
@@ -106,6 +107,31 @@ func TestPIDTargetExits(t *testing.T) {
 	case <-exited:
 	case <-time.After(2 * time.Second):
 		t.Error("waitAll returned but the child is still running")
+	}
+}
+
+func TestPIDTargetZombie(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("zombies are only detected through /proc")
+	}
+	// Start a child that exits at once, and deliberately don't reap it
+	// until the end of the test: in between it is a zombie.
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "WAITFOR_TEST_SLEEP=0s")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	})
+	pid := cmd.Process.Pid
+
+	if pending := waitAll(testContext(t), []target{&pidTarget{pid: pid}}, fastPoll, nil); pending != nil {
+		t.Fatalf("zombie child never counted as exited: %v", pending[0].err)
+	}
+	if err := signalZero(pid); err != nil {
+		t.Errorf("child was reaped early, so this test proved nothing: %v", err)
 	}
 }
 
