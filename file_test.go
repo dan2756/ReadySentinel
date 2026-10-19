@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -41,6 +44,13 @@ func TestParseTargetsFileKeyword(t *testing.T) {
 	}
 	if _, err := parseTargets([]string{"file", ""}, defaultOptions(t)); err == nil {
 		t.Error("file with an empty path: want error")
+	}
+}
+
+func TestParseTargetSuggestsFile(t *testing.T) {
+	_, err := parseTarget("done.flag", defaultOptions(t))
+	if err == nil || !strings.Contains(err.Error(), `"file done.flag"`) {
+		t.Errorf("err = %v, want a hint to use file", err)
 	}
 }
 
@@ -82,6 +92,70 @@ func TestFileTarget(t *testing.T) {
 	check("written", exists, true)
 	check("written", nonempty, true)
 	check("written", gone, false)
+}
+
+func TestFileTargetGoneSymlink(t *testing.T) {
+	// A symlink lock ("ln -s $$ deploy.lock") points at something that
+	// doesn't exist, but the lock is still held while the link is there.
+	path := filepath.Join(t.TempDir(), "deploy.lock")
+	if err := os.Symlink("12345", path); err != nil {
+		t.Skip("cannot create symlinks:", err)
+	}
+	gone := &fileTarget{path: path, gone: true}
+	if err := gone.Check(testContext(t)); err == nil {
+		t.Error("dangling symlink counted as gone")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := gone.Check(testContext(t)); err != nil {
+		t.Errorf("removed symlink: %v", err)
+	}
+}
+
+func TestFileTargetGoneNotDir(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// f is a regular file, so f/sub cannot exist.
+	if err := (&fileTarget{path: filepath.Join(file, "sub"), gone: true}).Check(testContext(t)); err != nil {
+		t.Errorf("path under a regular file: %v", err)
+	}
+}
+
+func TestFileTargetHungStat(t *testing.T) {
+	var calls atomic.Int32
+	release := make(chan struct{})
+	orig := stat
+	stat = func(string) (fs.FileInfo, error) {
+		calls.Add(1)
+		<-release // like a stat on a hung network mount
+		return nil, fs.ErrNotExist
+	}
+	t.Cleanup(func() { stat = orig })
+
+	tgt := &fileTarget{path: "/hung/mount/file"}
+	cfg := fastPoll
+	cfg.attemptTimeout = 20 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if pending := waitAll(ctx, []target{tgt}, cfg, nil); len(pending) != 1 {
+		t.Fatalf("pending = %v, want the file", pending)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("waitAll took %v after a 200ms timeout", elapsed)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("stat called %d times, want 1: a stat that is still running should not be started again", n)
+	}
+
+	// Once the stat returns, the next attempt gets its result.
+	close(release)
+	if err := tgt.Check(testContext(t)); err == nil || err.Error() != "does not exist" {
+		t.Errorf("err = %v, want the result of the hung stat", err)
+	}
 }
 
 func TestFileTargetDirectory(t *testing.T) {

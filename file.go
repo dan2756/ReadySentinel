@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"syscall"
 )
 
 // fileTarget is ready once path exists (and, with nonempty, has content),
@@ -14,7 +15,12 @@ type fileTarget struct {
 	path     string
 	nonempty bool
 	gone     bool
+
+	running chan error // result of a check an earlier attempt gave up on
 }
+
+// stat and lstat are os.Stat and os.Lstat. Tests replace them.
+var stat, lstat = os.Stat, os.Lstat
 
 func newFileTarget(path string, o *options) (target, error) {
 	if path == "" {
@@ -33,10 +39,34 @@ func (t *fileTarget) String() string {
 	return "file " + t.path
 }
 
-func (t *fileTarget) Check(context.Context) error {
-	fi, err := os.Stat(t.path)
+// Check runs the file system calls in the background, because they cannot
+// be cancelled and on a hung network mount they can block for minutes;
+// waiting on ctx instead keeps the timeouts and Ctrl-C working. If an attempt
+// gives up on a check, the next attempt waits for that same check rather than
+// starting another one. Check must not be called concurrently.
+func (t *fileTarget) Check(ctx context.Context) error {
+	if t.running == nil {
+		ch := make(chan error, 1)
+		go func() { ch <- t.check() }()
+		t.running = ch
+	}
+	select {
+	case err := <-t.running:
+		t.running = nil
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (t *fileTarget) check() error {
 	if t.gone {
-		if errors.Is(err, fs.ErrNotExist) {
+		// Lstat, so that a symlink counts as present even when what it
+		// points to doesn't exist, as with "ln -s $$ deploy.lock" locks.
+		// ENOTDIR means part of the path is not a directory, so the path
+		// cannot exist.
+		_, err := lstat(t.path)
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 			return nil
 		}
 		if err != nil {
@@ -45,6 +75,7 @@ func (t *fileTarget) Check(context.Context) error {
 		return errors.New("still exists")
 	}
 
+	fi, err := stat(t.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return errors.New("does not exist")
 	}

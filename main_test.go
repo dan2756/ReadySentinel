@@ -65,7 +65,7 @@ func TestRunAny(t *testing.T) {
 	if code := run([]string{closed, open.Addr().String(), "-t", "200ms", "-i", "20ms"}, &stdout, &stderr); code != exitTimeout {
 		t.Errorf("without --any: exit %d, want %d", code, exitTimeout)
 	}
-	if !strings.Contains(stderr.String(), "still waiting for "+closed+"\n") {
+	if !strings.Contains(stderr.String(), "not ready:\n  "+closed+": connection refused\n") {
 		t.Errorf("stderr = %q, want it to name the closed port", stderr.String())
 	}
 }
@@ -77,8 +77,9 @@ func TestRunTimeout(t *testing.T) {
 	if code != exitTimeout {
 		t.Fatalf("exit %d, want %d", code, exitTimeout)
 	}
-	if !strings.Contains(stderr.String(), "timed out after") {
-		t.Errorf("stderr = %q, want a timeout message", stderr.String())
+	re := regexp.MustCompile(`… timed out after 0\.\ds \(connection refused\)\n$`)
+	if !re.MatchString(stderr.String()) {
+		t.Errorf("stderr = %q, want a timeout message with the reason", stderr.String())
 	}
 }
 

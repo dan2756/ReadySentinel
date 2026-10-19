@@ -44,7 +44,11 @@ func TestParsePID(t *testing.T) {
 	if len(ts) != 1 || ts[0].String() != "pid 1234" {
 		t.Errorf("targets = %v", ts)
 	}
-	for _, words := range [][]string{{"pid"}, {"pid", "abc"}, {"pid", "0"}, {"pid", "-5"}} {
+	for _, words := range [][]string{
+		{"pid"}, {"pid", "abc"}, {"pid", "0"}, {"pid", "-5"},
+		// pid_t is 32 bits: kill(2) would see these as 1, -1 and -2147483648.
+		{"pid", "4294967297"}, {"pid", "4294967295"}, {"pid", "2147483648"},
+	} {
 		if _, err := parseTargets(words, defaultOptions(t)); err == nil {
 			t.Errorf("parseTargets(%q): want error", words)
 		}

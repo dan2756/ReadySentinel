@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"time"
 )
 
@@ -176,6 +177,38 @@ func TestHTTPTargetContainsLimit(t *testing.T) {
 	tgt.contains = "ready"
 	if err := tgt.Check(testContext(t)); err == nil {
 		t.Error("matched text past the body size limit")
+	}
+}
+
+func TestHTTPTargetContainsStreaming(t *testing.T) {
+	// The server sends the text, then keeps the response open.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "ready")
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	tgt := newTestHTTPTarget(t, srv.URL, defaultStatus)
+	tgt.contains = "ready"
+	if err := attempt(testContext(t), tgt, 2*time.Second); err != nil {
+		t.Errorf("text already sent: %v", err)
+	}
+
+	tgt.contains = "nope"
+	err := attempt(testContext(t), tgt, 50*time.Millisecond)
+	if err == nil {
+		t.Fatal("matched text that was never sent")
+	}
+	if got := reason(err); !strings.Contains(got, "still being sent") {
+		t.Errorf("reason = %q, want it to say the body was still being sent", got)
+	}
+}
+
+func TestBodyContainsSplitReads(t *testing.T) {
+	r := iotest.OneByteReader(strings.NewReader(`{"status":"green"}`))
+	if found, err := bodyContains(r, `"status":"green"`); !found || err != nil {
+		t.Errorf("bodyContains = %v, %v; want a match", found, err)
 	}
 }
 

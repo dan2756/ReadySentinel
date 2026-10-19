@@ -55,6 +55,11 @@ Flags:
 
 Durations look like 30s, 1m30s or 500ms; a bare number means seconds.
 
+Examples:
+  waitfor db:5432 -t 30s && ./migrate
+  waitfor http://localhost:8080/health --status 200 -- npm test
+  waitfor --gone ./deploy.lock
+
 Exit status:
   0    ready (or with COMMAND, the command's own status)
   1    timed out

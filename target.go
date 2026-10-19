@@ -70,7 +70,7 @@ func parseTarget(s string, o *options) (target, error) {
 	case strings.Contains(s, ":"):
 		return parseHostPort(s)
 	}
-	return nil, fmt.Errorf("don't know how to wait for %q (want PORT, HOST:PORT, a URL, file PATH or pid PID)", s)
+	return nil, fmt.Errorf("don't know how to wait for %q: write HOST:PORT for a port, or \"file %s\" or \"./%s\" for a file", s, s, s)
 }
 
 func parseHostPort(s string) (target, error) {

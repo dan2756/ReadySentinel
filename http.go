@@ -62,15 +62,47 @@ func (t *httpTarget) Check(ctx context.Context) error {
 		return fmt.Errorf("got %s", resp.Status)
 	}
 	if t.contains != "" {
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-		if err != nil {
+		found, err := bodyContains(resp.Body, t.contains)
+		switch {
+		case found:
+			return nil
+		case errors.Is(err, context.DeadlineExceeded):
+			// There was a response, so don't let this be reported as
+			// "no response": its body was still coming when time ran out.
+			return fmt.Errorf("body does not contain %q; it was still being sent", t.contains)
+		case err != nil:
 			return fmt.Errorf("reading body: %w", err)
 		}
-		if !bytes.Contains(body, []byte(t.contains)) {
-			return fmt.Errorf("body does not contain %q", t.contains)
-		}
+		return fmt.Errorf("body does not contain %q", t.contains)
 	}
 	return nil
+}
+
+// bodyContains reports whether the first maxBody bytes of r contain text. It
+// returns as soon as text has been read, so a body that is still being
+// streamed can match.
+func bodyContains(r io.Reader, text string) (bool, error) {
+	r = io.LimitReader(r, maxBody)
+	var body []byte
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			// Search only the new bytes, plus enough of the old ones to
+			// catch a match split across two reads.
+			from := max(0, len(body)-len(text)+1)
+			body = append(body, buf[:n]...)
+			if bytes.Contains(body[from:], []byte(text)) {
+				return true, nil
+			}
+		}
+		if err == io.EOF {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
 }
 
 // statusRange is an inclusive range of HTTP status codes, written as "200"
