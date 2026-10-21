@@ -57,12 +57,13 @@ func TestParseArgsDefaults(t *testing.T) {
 
 func TestParseDuration(t *testing.T) {
 	good := map[string]time.Duration{
-		"30s":   30 * time.Second,
-		"500ms": 500 * time.Millisecond,
-		"1m30s": 90 * time.Second,
-		"2":     2 * time.Second,
-		"1.5":   1500 * time.Millisecond,
-		"0":     0,
+		"30s":       30 * time.Second,
+		"500ms":     500 * time.Millisecond,
+		"1m30s":     90 * time.Second,
+		"2":         2 * time.Second,
+		"1.5":       1500 * time.Millisecond,
+		"0":         0,
+		"100000000": 100000000 * time.Second, // fits; about three years
 	}
 	for in, want := range good {
 		got, err := parseDuration(in)
@@ -73,6 +74,14 @@ func TestParseDuration(t *testing.T) {
 	for _, in := range []string{"", "soon", "-1s", "1.2.3", "."} {
 		if got, err := parseDuration(in); err == nil {
 			t.Errorf("parseDuration(%q) = %v, want error", in, got)
+		}
+	}
+	// Bigger than math.MaxInt64 nanoseconds. The conversion used to wrap
+	// to a negative duration, which -t treats as "wait forever".
+	for _, in := range []string{"100000000000", "9223372037"} {
+		got, err := parseDuration(in)
+		if err == nil || got < 0 {
+			t.Errorf("parseDuration(%q) = %v, %v; want a too-large error", in, got, err)
 		}
 	}
 }

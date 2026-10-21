@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -126,10 +127,21 @@ func parseDuration(s string) (time.Duration, error) {
 	errBad := errors.New("want a duration like 30s, 500ms or 2m")
 	if s != "" && strings.Trim(s, "0123456789.") == "" {
 		secs, err := strconv.ParseFloat(s, 64)
-		if err != nil {
+		if err != nil || math.IsNaN(secs) || math.IsInf(secs, 0) {
 			return 0, errBad
 		}
-		return time.Duration(secs * float64(time.Second)), nil
+		// A bare number is seconds. Converting an out-of-range float to a
+		// Duration wraps to a negative value, and a negative -t is treated
+		// as "wait forever".
+		ns := secs * float64(time.Second)
+		if ns < 0 || ns > float64(math.MaxInt64) {
+			return 0, errors.New("duration is too large")
+		}
+		d := time.Duration(ns)
+		if d < 0 {
+			return 0, errors.New("duration is too large")
+		}
+		return d, nil
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {

@@ -128,3 +128,16 @@ func TestNextDelay(t *testing.T) {
 		}
 	}
 }
+
+func TestNextDelayNoOverflow(t *testing.T) {
+	// 900000h fits in a Duration, but four times that does not. The old
+	// cap wrapped negative and the poll loop would spin.
+	base := 900000 * time.Hour
+	d := base
+	for i := 0; i < 5; i++ {
+		d = nextDelay(d, base)
+		if d <= 0 {
+			t.Fatalf("step %d: delay = %v, want positive", i+1, d)
+		}
+	}
+}
