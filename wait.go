@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"math"
 	"sort"
 	"time"
 )
@@ -106,7 +107,25 @@ func attempt(ctx context.Context, t target, timeout time.Duration) error {
 	return t.Check(ctx)
 }
 
-// nextDelay backs off gently from the base interval.
+// nextDelay backs off gently from the base interval. The cap is computed in
+// a way that cannot wrap: 4 times a large but legal interval does not fit
+// in a Duration, and a wrapped cap is negative, which makes the poll loop
+// spin (a negative timer fires immediately).
 func nextDelay(cur, base time.Duration) time.Duration {
-	return min(time.Duration(float64(cur)*backoffFactor), backoffCap*base)
+	limit := base
+	if base > 0 && base <= math.MaxInt64/backoffCap {
+		limit = backoffCap * base
+	} else if base > math.MaxInt64/backoffCap {
+		limit = math.MaxInt64
+	}
+	var next time.Duration
+	if cur > 0 && float64(cur) >= float64(math.MaxInt64)/backoffFactor {
+		next = limit
+	} else {
+		next = time.Duration(float64(cur) * backoffFactor)
+	}
+	if next < 0 || next > limit {
+		return limit
+	}
+	return next
 }

@@ -94,6 +94,21 @@ func TestRunQuiet(t *testing.T) {
 	}
 }
 
+func TestRunRejectsHugeTimeout(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	start := time.Now()
+	code := run([]string{"-t", "100000000000", "127.0.0.1:1"}, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("exit %d, want %d; stderr: %s", code, exitUsage, stderr.String())
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("overflowing timeout waited instead of failing")
+	}
+	if !strings.Contains(stderr.String(), "too large") {
+		t.Errorf("stderr = %q, want it to say the duration is too large", stderr.String())
+	}
+}
+
 func TestRunUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{},
