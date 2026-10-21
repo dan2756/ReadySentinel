@@ -50,12 +50,27 @@ func (t *fileTarget) Check(ctx context.Context) error {
 		go func() { ch <- t.check() }()
 		t.running = ch
 	}
-	select {
-	case err := <-t.running:
+	err, done := awaitCheck(ctx, t.running)
+	if done {
 		t.running = nil
-		return err
+	}
+	return err
+}
+
+// awaitCheck waits for one check result. When the result is already queued
+// as ctx is cancelled, select would otherwise pick either one; preferring
+// the result means a check that finished on the deadline still counts.
+func awaitCheck(ctx context.Context, ch <-chan error) (error, bool) {
+	select {
+	case err := <-ch:
+		return err, true
 	case <-ctx.Done():
-		return ctx.Err()
+		select {
+		case err := <-ch:
+			return err, true
+		default:
+			return ctx.Err(), false
+		}
 	}
 }
 
