@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -121,6 +122,27 @@ func TestFileTargetGoneNotDir(t *testing.T) {
 	// f is a regular file, so f/sub cannot exist.
 	if err := (&fileTarget{path: filepath.Join(file, "sub"), gone: true}).Check(testContext(t)); err != nil {
 		t.Errorf("path under a regular file: %v", err)
+	}
+}
+
+func TestAwaitCheckPrefersFinishedResult(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// Both the result and the cancellation are ready, so select may choose
+	// either. A finished check must win every time.
+	for i := 0; i < 200; i++ {
+		ch := make(chan error, 1)
+		ch <- nil
+		err, done := awaitCheck(ctx, ch)
+		if !done || err != nil {
+			t.Fatalf("attempt %d: err=%v done=%v; finished check was dropped", i, err, done)
+		}
+	}
+
+	ch := make(chan error)
+	err, done := awaitCheck(ctx, ch)
+	if done || !errors.Is(err, context.Canceled) {
+		t.Fatalf("unfinished check: err=%v done=%v, want the cancellation", err, done)
 	}
 }
 
