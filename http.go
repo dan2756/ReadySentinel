@@ -30,6 +30,14 @@ func newHTTPTarget(raw string, o *options) (target, error) {
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("invalid URL %q", raw)
 	}
+	// url.Parse accepts ports it can never dial. A TCP target rejects those
+	// up front; an HTTP target used to retry them until --timeout.
+	if port := u.Port(); port != "" {
+		n, nerr := strconv.Atoi(port)
+		if nerr != nil || n < 1 || n > 65535 {
+			return nil, fmt.Errorf("invalid port %q in %q", port, raw)
+		}
+	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DisableKeepAlives = true // every attempt should open a fresh connection
 	return &httpTarget{

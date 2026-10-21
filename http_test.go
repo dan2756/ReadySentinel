@@ -50,6 +50,17 @@ func TestParseTargetHTTP(t *testing.T) {
 	if _, err := parseTarget("http://", defaultOptions(t)); err == nil {
 		t.Error(`parseTarget("http://"): want error`)
 	}
+	for _, in := range []string{
+		"http://localhost:99999/health",
+		"http://127.0.0.1:65536/",
+		"https://[::1]:0/health",
+		"http://localhost:0/",
+	} {
+		got, err := parseTarget(in, defaultOptions(t))
+		if err == nil {
+			t.Errorf("parseTarget(%q) = %v, want an invalid port error", in, got)
+		}
+	}
 }
 
 func statusServer(t *testing.T) *httptest.Server {
@@ -268,5 +279,9 @@ func TestRunHTTP(t *testing.T) {
 	stderr.Reset()
 	if code := run([]string{srv.URL + "/ok", "--status", "2xx"}, &stdout, &stderr); code != exitUsage {
 		t.Errorf("--status 2xx: exit %d, want %d", code, exitUsage)
+	}
+	stderr.Reset()
+	if code := run([]string{"http://localhost:99999/health"}, &stdout, &stderr); code != exitUsage {
+		t.Errorf("port 99999: exit %d, want %d; stderr: %s", code, exitUsage, stderr.String())
 	}
 }
