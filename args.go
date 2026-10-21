@@ -90,8 +90,16 @@ func parseArgs(args []string) (*options, error) {
 		if len(args) == 0 {
 			break
 		}
-		o.words = append(o.words, args[0])
+		word := args[0]
+		o.words = append(o.words, word)
 		args = args[1:]
+		// "file" and "pid" take the next word as their operand even when it
+		// starts with "-": that is a path or a pid, not a flag. The flag
+		// package would otherwise reject "file -deploy.lock".
+		if (word == "file" || word == "pid") && len(args) > 0 {
+			o.words = append(o.words, args[0])
+			args = args[1:]
+		}
 	}
 
 	if o.interval <= 0 {
