@@ -37,7 +37,14 @@ func TestStatusRangeSet(t *testing.T) {
 }
 
 func TestParseTargetHTTP(t *testing.T) {
-	for _, in := range []string{"http://localhost:8080/health", "https://example.com", "HTTP://example.com/"} {
+	for _, in := range []string{
+		"http://localhost:8080/health",
+		"https://example.com",
+		"HTTP://example.com/",
+		"http://[::1]:8080/",
+		"http://[fe80::1%25eth0]:8080/",
+		"http://localhost:/health",
+	} {
 		got, err := parseTarget(in, defaultOptions(t))
 		if err != nil {
 			t.Errorf("parseTarget(%q): %v", in, err)
@@ -59,6 +66,21 @@ func TestParseTargetHTTP(t *testing.T) {
 		got, err := parseTarget(in, defaultOptions(t))
 		if err == nil {
 			t.Errorf("parseTarget(%q) = %v, want an invalid port error", in, got)
+		}
+	}
+	// An empty host dials localhost, so http://:$port/ would look "up"
+	// whenever something local is listening. An extra colon is a name that
+	// can never resolve. Both used to be retried until --timeout.
+	for _, in := range []string{
+		"http://:8080/health",
+		"http://user@:8080/health",
+		"http://host:80:80/",
+		"http://127.0.0.1:80:443/",
+		"https://example.com:443:443/",
+	} {
+		got, err := parseTarget(in, defaultOptions(t))
+		if err == nil {
+			t.Errorf("parseTarget(%q) = %v, want an invalid host error", in, got)
 		}
 	}
 }
@@ -283,5 +305,31 @@ func TestRunHTTP(t *testing.T) {
 	stderr.Reset()
 	if code := run([]string{"http://localhost:99999/health"}, &stdout, &stderr); code != exitUsage {
 		t.Errorf("port 99999: exit %d, want %d; stderr: %s", code, exitUsage, stderr.String())
+	}
+}
+
+func TestRunRejectsUndialableHTTPHost(t *testing.T) {
+	srv := statusServer(t)
+	_, port, ok := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")
+	if !ok || port == "" {
+		t.Fatalf("server URL %q", srv.URL)
+	}
+	// Something is listening on this port. The empty host must still be a
+	// usage error, not a successful dial of localhost.
+	urls := []string{
+		"http://:" + port + "/ok",
+		"http://host:80:80/health",
+		"http://127.0.0.1:80:443/",
+	}
+	for _, raw := range urls {
+		var stdout, stderr bytes.Buffer
+		start := time.Now()
+		code := run([]string{raw, "-t", "5s"}, &stdout, &stderr)
+		if code != exitUsage {
+			t.Errorf("%s: exit %d, want %d; stderr: %s", raw, code, exitUsage, stderr.String())
+		}
+		if time.Since(start) > time.Second {
+			t.Errorf("%s: took %v; an undialable URL was retried", raw, time.Since(start))
+		}
 	}
 }
