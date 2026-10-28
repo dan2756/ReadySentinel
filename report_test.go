@@ -78,6 +78,9 @@ func TestFormatDuration(t *testing.T) {
 		0:                                "0.0s",
 		2400 * time.Millisecond:          "2.4s",
 		59 * time.Second:                 "59.0s",
+		59940 * time.Millisecond:         "59.9s",
+		59950 * time.Millisecond:         "1m0s", // %.1f would print "60.0s"
+		59999 * time.Millisecond:         "1m0s",
 		72 * time.Second:                 "1m12s",
 		time.Hour + 500*time.Millisecond: "1h0m1s",
 	}
