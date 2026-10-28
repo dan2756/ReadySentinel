@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -27,7 +26,8 @@ Usage:
   waitfor [flags] TARGET... [-- COMMAND [ARG...]]
 
 All targets must be ready unless --any is given. With a COMMAND, waitfor
-execs it once ready and exits with its status; on timeout it is not run.
+execs it once ready and exits with its status; on timeout or interrupt it
+is not run.
 
 Targets:
   5432, :5432         TCP port on localhost
@@ -91,7 +91,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return usageError(stderr, err)
 	}
 
-	sigCtx, stopSignals := withSignals(context.Background())
+	sigCtx, stopSignals := newSignalContext(context.Background())
 	defer stopSignals()
 	ctx := sigCtx
 	if opts.timeout > 0 {
@@ -102,12 +102,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	rep := newReporter(stderr, opts.quiet, opts.any)
 	rep.start(targets)
-	if pending := waitAll(ctx, targets, opts.pollConfig(), rep.ready); len(pending) > 0 {
-		var sig *signalError
-		if errors.As(context.Cause(sigCtx), &sig) {
-			rep.interrupted()
-			return sig.exitCode()
-		}
+	pending := waitAll(ctx, targets, opts.pollConfig(), rep.ready)
+	// A target can become ready in the same moment as Ctrl-C. That is still
+	// an interrupt: the command must not run, same as on timeout.
+	if sig := signalCause(sigCtx); sig != nil {
+		rep.interrupted()
+		return sig.exitCode()
+	}
+	if len(pending) > 0 {
 		rep.timedOut(pending)
 		return exitTimeout
 	}
