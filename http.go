@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,13 +31,19 @@ func newHTTPTarget(raw string, o *options) (target, error) {
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("invalid URL %q", raw)
 	}
-	// url.Parse accepts ports it can never dial. A TCP target rejects those
-	// up front; an HTTP target used to retry them until --timeout.
+	// url.Parse accepts targets that can never be dialed, or that dial a
+	// different host than the one written. A TCP target rejects a bad port
+	// up front; an HTTP target used to retry these until --timeout.
+	// http://:8080/ has an empty host, and the client dials that as
+	// localhost. http://host:80:80/ is parsed with host "host:80".
 	if port := u.Port(); port != "" {
 		n, nerr := strconv.Atoi(port)
 		if nerr != nil || n < 1 || n > 65535 {
 			return nil, fmt.Errorf("invalid port %q in %q", port, raw)
 		}
+	}
+	if host := u.Hostname(); !validHTTPHost(host) {
+		return nil, fmt.Errorf("invalid host %q in %q", host, raw)
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DisableKeepAlives = true // every attempt should open a fresh connection
@@ -51,6 +58,24 @@ func newHTTPTarget(raw string, o *options) (target, error) {
 			},
 		},
 	}, nil
+}
+
+// validHTTPHost reports whether host is a name the HTTP client can dial.
+// Hostname() strips brackets, so a colon means IPv6 (optionally with a
+// zone) rather than a hostname. Anything else with a colon is an authority
+// url.Parse split in the wrong place.
+func validHTTPHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	if strings.IndexByte(host, ':') < 0 {
+		return true
+	}
+	ip, zone, hasZone := strings.Cut(host, "%")
+	if hasZone && (zone == "" || strings.ContainsRune(zone, '%')) {
+		return false
+	}
+	return net.ParseIP(ip) != nil
 }
 
 func (t *httpTarget) String() string { return t.url }
