@@ -115,7 +115,11 @@ func reason(err error) string {
 // formatDuration prints short durations as "2.4s" and longer ones as "1m12s".
 func formatDuration(d time.Duration) string {
 	if d < time.Minute {
-		return fmt.Sprintf("%.1fs", d.Seconds())
+		// %.1f rounds 59.95s up to "60.0s". That is a full minute, so print
+		// it the same way as 60s ("1m0s").
+		if d.Round(100*time.Millisecond) < time.Minute {
+			return fmt.Sprintf("%.1fs", d.Seconds())
+		}
 	}
 	return d.Round(time.Second).String()
 }
