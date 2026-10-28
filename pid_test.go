@@ -4,11 +4,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -144,6 +146,34 @@ func TestPIDTargetAlreadyGone(t *testing.T) {
 	<-exited
 	if err := (&pidTarget{pid: pid}).Check(testContext(t)); err != nil {
 		t.Errorf("exited child: %v", err)
+	}
+}
+
+func TestRunReadyButInterruptedSkipsCommand(t *testing.T) {
+	pid, exited := startSleeper(t, 0)
+	<-exited
+
+	orig := newSignalContext
+	t.Cleanup(func() { newSignalContext = orig })
+	newSignalContext = func(parent context.Context) (context.Context, func()) {
+		ctx, cancel := context.WithCancelCause(parent)
+		cancel(&signalError{sig: syscall.SIGINT})
+		return ctx, func() { cancel(nil) }
+	}
+
+	var stdout, stderr bytes.Buffer
+	// The pid has already exited, so the wait succeeds. A missing command
+	// would exit 127 if it were started; LookPath fails before exec, so a
+	// regression cannot replace this test process.
+	code := run([]string{"pid", strconv.Itoa(pid), "--", "waitfor-no-such-command"}, &stdout, &stderr)
+	if code != 130 {
+		t.Fatalf("exit %d, want 130; stderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "interrupted") {
+		t.Errorf("stderr = %q, want it to say interrupted", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "not found") {
+		t.Errorf("command was started despite the interrupt: %s", stderr.String())
 	}
 }
 

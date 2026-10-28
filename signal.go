@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +22,19 @@ func (e *signalError) exitCode() int {
 	}
 	return exitInterrupted
 }
+
+// signalCause reports the signal that cancelled ctx, if it was an interrupt.
+func signalCause(ctx context.Context) *signalError {
+	var sig *signalError
+	if errors.As(context.Cause(ctx), &sig) {
+		return sig
+	}
+	return nil
+}
+
+// newSignalContext is withSignals. Tests replace it to deliver an interrupt
+// without signaling the test process.
+var newSignalContext = withSignals
 
 // withSignals returns a context that is cancelled with a *signalError when
 // SIGINT or SIGTERM arrives. Calling stop restores the default handling.

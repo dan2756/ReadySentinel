@@ -136,7 +136,7 @@ waitfor db:5432 cache:6379 -t 60s -- npm start
 waitfor `exec`s the command in its own place, the way a shell's `exec`
 does: it keeps the same pid, stdin/stdout/stderr and environment, receives
 signals directly, and its exit status is the one you see. If the wait times
-out, the command is not run.
+out or is interrupted, the command is not run.
 
 ## Output
 
