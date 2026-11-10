@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"regexp"
 	"strings"
@@ -139,6 +140,33 @@ func TestRunUsageErrors(t *testing.T) {
 		if !strings.HasPrefix(stderr.String(), "waitfor: ") {
 			t.Errorf("run(%q) stderr = %q", args, stderr.String())
 		}
+	}
+}
+
+func TestRunInterruptRecordedAtStopSkipsCommand(t *testing.T) {
+	ln := listen(t)
+	orig := newSignalContext
+	t.Cleanup(func() { newSignalContext = orig })
+	// The signal is only visible once the handler is stopped, which is how a
+	// SIGINT sitting in the buffer shows up. Checking before stop used to
+	// miss it and exec the command.
+	newSignalContext = func(parent context.Context) (context.Context, func()) {
+		ctx, cancel := context.WithCancelCause(parent)
+		return ctx, func() {
+			cancel(&signalError{sig: os.Interrupt})
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{ln.Addr().String(), "--", "waitfor-no-such-command"}, &stdout, &stderr)
+	if code != 130 {
+		t.Fatalf("exit %d, want 130; stderr: %s", code, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "not found") {
+		t.Fatalf("command was started despite the interrupt: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "interrupted") {
+		t.Errorf("stderr = %q, want it to say interrupted", stderr.String())
 	}
 }
 

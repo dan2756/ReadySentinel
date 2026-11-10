@@ -104,8 +104,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	rep := newReporter(stderr, opts.quiet, opts.any)
 	rep.start(targets)
 	pending := waitAll(ctx, targets, opts.pollConfig(), rep.ready)
-	// A target can become ready in the same moment as Ctrl-C. That is still
-	// an interrupt: the command must not run, same as on timeout.
+	// Disarm before deciding. A signal that arrived as the wait ended can
+	// still be queued, and stop is what records it. The command must not
+	// run after Ctrl-C, same as on timeout. Stopping here also restores the
+	// default handling, so an exec'd command receives signals itself.
+	stopSignals()
 	if sig := signalCause(sigCtx); sig != nil {
 		rep.interrupted()
 		return sig.exitCode()
@@ -116,7 +119,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(opts.command) > 0 {
-		stopSignals() // let the command see signals as usual
 		return execCommand(opts.command, stderr)
 	}
 	return exitReady
