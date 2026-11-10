@@ -89,7 +89,8 @@ the matching kind.
 HTTP targets send a `GET` with a `waitfor/VERSION` user agent and do not
 follow redirects, so a `302` to a login page counts as up under the default
 range. Use `--status 200` to insist on a real `200`, or `--status 200-299`
-for any success.
+for any success. A password embedded in the URL is still sent, but progress
+output replaces it with `xxxxx` so it does not land in the log.
 
 `--contains` is for health endpoints that answer `200` before they are
 really ready. Only the first 1 MiB of the body is searched, and it matches
