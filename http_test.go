@@ -308,6 +308,32 @@ func TestRunHTTP(t *testing.T) {
 	}
 }
 
+func TestHTTPTargetRedactsPassword(t *testing.T) {
+	const secret = "s3cret-token"
+	var gotUser, gotPass string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUser, gotPass, _ = r.BasicAuth()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	raw := strings.Replace(srv.URL, "://", "://user:"+secret+"@", 1) + "/health"
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{raw, "-t", "2s"}, &stdout, &stderr); code != exitReady {
+		t.Fatalf("exit %d; stderr: %s", code, stderr.String())
+	}
+	if gotUser != "user" || gotPass != secret {
+		t.Fatalf("server saw user %q pass %q; the request must still authenticate", gotUser, gotPass)
+	}
+	out := stderr.String()
+	if strings.Contains(out, secret) {
+		t.Errorf("progress printed the password:\n%s", out)
+	}
+	if !strings.Contains(out, "user:xxxxx@") {
+		t.Errorf("progress = %q, want the password redacted", out)
+	}
+}
+
 func TestRunRejectsUndialableHTTPHost(t *testing.T) {
 	srv := statusServer(t)
 	_, port, ok := strings.Cut(strings.TrimPrefix(srv.URL, "http://"), ":")

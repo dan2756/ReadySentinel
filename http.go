@@ -20,7 +20,8 @@ const maxBody = 1 << 20
 // contains is set, a body containing that text. Redirects are not followed:
 // a 3xx is itself a sign of life, and the default range accepts it.
 type httpTarget struct {
-	url      string
+	url      string // requested as given, so a password is still sent
+	display  string // progress text, with any password redacted
 	status   statusRange
 	contains string
 	client   *http.Client
@@ -45,10 +46,19 @@ func newHTTPTarget(raw string, o *options) (target, error) {
 	if host := u.Hostname(); !validHTTPHost(host) {
 		return nil, fmt.Errorf("invalid host %q in %q", host, raw)
 	}
+	// Progress is written to stderr, which CI logs keep. Redact a URL
+	// password the way net/url does; the request still uses raw.
+	shown := raw
+	if u.User != nil {
+		if _, ok := u.User.Password(); ok {
+			shown = u.Redacted()
+		}
+	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DisableKeepAlives = true // every attempt should open a fresh connection
 	return &httpTarget{
 		url:      raw,
+		display:  shown,
 		status:   o.status,
 		contains: o.contains,
 		client: &http.Client{
@@ -78,7 +88,12 @@ func validHTTPHost(host string) bool {
 	return net.ParseIP(ip) != nil
 }
 
-func (t *httpTarget) String() string { return t.url }
+func (t *httpTarget) String() string {
+	if t.display != "" {
+		return t.display
+	}
+	return t.url
+}
 
 func (t *httpTarget) Check(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.url, nil)
