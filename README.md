@@ -72,6 +72,8 @@ waitfor --any primary:5432 replica:5432    # whichever answers first
 | `--version`             |           | print the version                            |
 
 Durations are Go-style (`30s`, `1m30s`, `500ms`); a bare number is seconds.
+Anything shorter than a nanosecond is rejected. Rounded down to zero it
+would mean "wait forever", the same as `--timeout 0`.
 
 After each failed attempt the delay grows by half, up to four times
 `--interval` (500ms, 750ms, 1.1s, 1.7s, 2s, 2s, …), so a long wait doesn't

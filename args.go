@@ -140,7 +140,8 @@ func parseDuration(s string) (time.Duration, error) {
 		}
 		// A bare number is seconds. Converting an out-of-range float to a
 		// Duration wraps to a negative value, and a negative -t is treated
-		// as "wait forever".
+		// as "wait forever". Sub-nanosecond values wrap the other way, to
+		// zero, which is the same "wait forever".
 		ns := secs * float64(time.Second)
 		if ns < 0 || ns > float64(math.MaxInt64) {
 			return 0, errors.New("duration is too large")
@@ -149,7 +150,7 @@ func parseDuration(s string) (time.Duration, error) {
 		if d < 0 {
 			return 0, errors.New("duration is too large")
 		}
-		return d, nil
+		return acceptDuration(s, d)
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil {
@@ -158,5 +159,24 @@ func parseDuration(s string) (time.Duration, error) {
 	if d < 0 {
 		return 0, errors.New("duration must not be negative")
 	}
+	return acceptDuration(s, d)
+}
+
+// acceptDuration rejects a positive value that rounded down to zero.
+// time.Duration is whole nanoseconds, and a negative or zero -t waits
+// forever, so 0.5ns must not silently become "no timeout".
+func acceptDuration(s string, d time.Duration) (time.Duration, error) {
+	if d == 0 && hasNonZeroDigit(s) {
+		return 0, errors.New("duration is too small")
+	}
 	return d, nil
+}
+
+func hasNonZeroDigit(s string) bool {
+	for _, r := range s {
+		if r >= '1' && r <= '9' {
+			return true
+		}
+	}
+	return false
 }
