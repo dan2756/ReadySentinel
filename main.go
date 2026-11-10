@@ -54,6 +54,7 @@ Flags:
       --version            print the version
 
 Durations look like 30s, 1m30s or 500ms; a bare number means seconds.
+Anything shorter than 1ns is an error (it would round down to 0).
 
 Examples:
   waitfor db:5432 -t 30s && ./migrate

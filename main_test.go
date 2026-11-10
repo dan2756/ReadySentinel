@@ -109,6 +109,21 @@ func TestRunRejectsHugeTimeout(t *testing.T) {
 	}
 }
 
+func TestRunRejectsTinyTimeout(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	start := time.Now()
+	code := run([]string{"-t", "0.5ns", "127.0.0.1:1"}, &stdout, &stderr)
+	if code != exitUsage {
+		t.Fatalf("exit %d, want %d; stderr: %s", code, exitUsage, stderr.String())
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("sub-nanosecond timeout waited instead of failing")
+	}
+	if !strings.Contains(stderr.String(), "too small") {
+		t.Errorf("stderr = %q, want it to say the duration is too small", stderr.String())
+	}
+}
+
 func TestRunUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{},

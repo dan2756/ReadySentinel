@@ -108,6 +108,23 @@ func TestParseDuration(t *testing.T) {
 			t.Errorf("parseDuration(%q) = %v, want error", in, got)
 		}
 	}
+	// Explicit zero still means "no limit". A positive value that does not
+	// survive as a whole nanosecond used to become that same zero.
+	for _, in := range []string{"0s", "0.0s", "0ns", "0.0"} {
+		got, err := parseDuration(in)
+		if err != nil || got != 0 {
+			t.Errorf("parseDuration(%q) = %v, %v; want 0", in, got, err)
+		}
+	}
+	for _, in := range []string{"0.5ns", "0.9ns", "0.0000000001", "0.0000000004s", "0h0m0.4ns"} {
+		got, err := parseDuration(in)
+		if err == nil || got != 0 {
+			t.Errorf("parseDuration(%q) = %v, %v; want a too-small error", in, got, err)
+		}
+	}
+	if got, err := parseDuration("0.000000001"); err != nil || got != time.Nanosecond {
+		t.Errorf("parseDuration(1ns) = %v, %v; want 1ns", got, err)
+	}
 	// Bigger than math.MaxInt64 nanoseconds. The conversion used to wrap
 	// to a negative duration, which -t treats as "wait forever".
 	for _, in := range []string{"100000000000", "9223372037"} {
