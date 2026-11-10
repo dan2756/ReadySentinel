@@ -94,7 +94,9 @@ output replaces it with `xxxxx` so it does not land in the log.
 
 `--contains` is for health endpoints that answer `200` before they are
 really ready. Only the first 1 MiB of the body is searched, and it matches
-as soon as TEXT arrives, even if the server is still sending the rest.
+as soon as TEXT arrives, even if the server is still sending the rest. If
+that prefix runs out without a match, the error says the search stopped at
+1 MiB rather than claiming the text is simply absent.
 
 ```sh
 waitfor http://localhost:9200/_cluster/health --contains '"status":"green"'

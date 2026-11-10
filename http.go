@@ -16,6 +16,10 @@ import (
 // maxBody caps how much of a response body --contains searches.
 const maxBody = 1 << 20
 
+// errBodyLimit means text was not found and the body was at least maxBody
+// bytes, so the rest was not searched.
+var errBodyLimit = errors.New("body limit")
+
 // httpTarget is ready once a GET request returns an accepted status and, if
 // contains is set, a body containing that text. Redirects are not followed:
 // a 3xx is itself a sign of life, and the default range accepts it.
@@ -118,6 +122,8 @@ func (t *httpTarget) Check(ctx context.Context) error {
 			// There was a response, so don't let this be reported as
 			// "no response": its body was still coming when time ran out.
 			return fmt.Errorf("body does not contain %q; it was still being sent", t.contains)
+		case errors.Is(err, errBodyLimit):
+			return fmt.Errorf("body does not contain %q in the first 1 MiB", t.contains)
 		case err != nil:
 			return fmt.Errorf("reading body: %w", err)
 		}
@@ -145,6 +151,9 @@ func bodyContains(r io.Reader, text string) (bool, error) {
 			}
 		}
 		if err == io.EOF {
+			if len(body) >= maxBody {
+				return false, errBodyLimit
+			}
 			return false, nil
 		}
 		if err != nil {
