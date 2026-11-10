@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
@@ -36,21 +37,52 @@ func signalCause(ctx context.Context) *signalError {
 // without signaling the test process.
 var newSignalContext = withSignals
 
+// beforeSignalSelect, if set, runs in the signal goroutine before it waits.
+// Tests use it to hold that goroutine so a signal can sit in the buffer.
+var beforeSignalSelect func()
+
 // withSignals returns a context that is cancelled with a *signalError when
 // SIGINT or SIGTERM arrives. Calling stop restores the default handling.
+//
+// stop waits until a signal that Notify has already queued is recorded.
+// Cancelling first and letting the goroutine notice afterwards drops that
+// signal: the first cancel wins, and a later cancel(signal) is a no-op.
 func withSignals(parent context.Context) (ctx context.Context, stop func()) {
 	ctx, cancel := context.WithCancelCause(parent)
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
+	stopped := make(chan struct{})
+	done := make(chan struct{})
+	hook := beforeSignalSelect
 	go func() {
+		defer close(done)
+		if hook != nil {
+			hook()
+		}
 		select {
 		case s := <-sigc:
 			cancel(&signalError{s})
+		case <-stopped:
+			// Prefer a signal already sitting in the buffer. Both this case
+			// and the receive above can be ready together; either one records it.
+			select {
+			case s := <-sigc:
+				cancel(&signalError{s})
+			default:
+				cancel(nil)
+			}
 		case <-ctx.Done():
+			select {
+			case s := <-sigc:
+				cancel(&signalError{s})
+			default:
+			}
 		}
 	}()
+	var once sync.Once
 	return ctx, func() {
 		signal.Stop(sigc)
-		cancel(nil)
+		once.Do(func() { close(stopped) })
+		<-done
 	}
 }
