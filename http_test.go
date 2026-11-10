@@ -208,8 +208,23 @@ func TestHTTPTargetContainsLimit(t *testing.T) {
 
 	tgt := newTestHTTPTarget(t, srv.URL, defaultStatus)
 	tgt.contains = "ready"
-	if err := tgt.Check(testContext(t)); err == nil {
-		t.Error("matched text past the body size limit")
+	err := tgt.Check(testContext(t))
+	if err == nil || !strings.Contains(err.Error(), "first 1 MiB") {
+		t.Errorf("err = %v, want it to say the body was only searched up to 1 MiB", err)
+	}
+
+	// The same text inside the window still matches, including when more
+	// bytes follow it.
+	early := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(bytes.Repeat([]byte("x"), maxBody-len("ready")))
+		io.WriteString(w, "ready")
+		w.Write(bytes.Repeat([]byte("y"), 64))
+	}))
+	defer early.Close()
+	tgt = newTestHTTPTarget(t, early.URL, defaultStatus)
+	tgt.contains = "ready"
+	if err := tgt.Check(testContext(t)); err != nil {
+		t.Errorf("text inside the first 1 MiB: %v", err)
 	}
 }
 
